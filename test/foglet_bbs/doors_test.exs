@@ -270,11 +270,19 @@ defmodule Foglet.DoorsTest do
 
       assert usurper.id == "usurper-reborn"
       assert usurper.runtime == :classic_dropfile
-      assert usurper.command == Path.join(priv_dir, "doors/demo/classic_dropfile_demo.py")
-      assert usurper.args == []
-      assert usurper.working_dir == Path.join(priv_dir, "doors/demo")
-      assert File.regular?(usurper.command)
-      assert executable?(usurper.command)
+      assert usurper.command == "/opt/foglet/doors/usurper/UsurperReborn"
+
+      assert usurper.args == [
+               "--door32",
+               "{dropfile:door32_sys}",
+               "--db",
+               "/data/usurper/usurper_online.db",
+               "--stdio"
+             ]
+
+      assert usurper.working_dir == "/opt/foglet/doors/usurper"
+      refute String.contains?(usurper.command, "classic_dropfile_demo.py")
+      refute String.contains?(usurper.working_dir, Path.join(priv_dir, "doors/demo"))
       assert usurper.output_encoding == :cp437
 
       assert usurper.env == %{
@@ -283,9 +291,13 @@ defmodule Foglet.DoorsTest do
                "TERM" => "xterm-256color"
              }
 
-      assert usurper.dropfile_formats == [:door_sys]
-      assert [%{filename: "DOOR.SYS", identity: :handle, expose_path: :env}] = usurper.dropfiles
-      assert usurper.sandbox.mode == :none
+      assert usurper.dropfile_formats == [:door32_sys]
+      assert [%{filename: "DOOR32.SYS", identity: :handle, expose_path: :env}] = usurper.dropfiles
+      assert usurper.sandbox.mode == :restricted_user_process_group
+      assert usurper.sandbox.user == "foglet-door"
+      assert usurper.sandbox.group == "foglet-door"
+      assert usurper.sandbox.process_tree == :process_group
+      assert usurper.sandbox.fail_closed? == true
     end
 
     test "hides built-in demo manifests when the env var is absent or empty" do

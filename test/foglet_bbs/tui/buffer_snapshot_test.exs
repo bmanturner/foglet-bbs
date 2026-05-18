@@ -69,10 +69,10 @@ defmodule Foglet.TUI.BufferSnapshotTest do
     assert_screen(render_fixture(:board_list, fixture_opts()), ~B"""
     ┌ Foglet ▸ Boards ───────────────────────────── @alice | 11:43 ┐
     │▾ main                                                        │
-    │▌ ◆✓    general                                 3 unread  2w  │
-    │  ✓     tech                                    all read  2w  │
-    │  ◆✓    lounge                                  1 unread  2w  │
-    │general • subscribed • 3 unread • 2w ago                      │
+    │▌ ◆✓    general                                 3 unread  3w  │
+    │  ✓     tech                                    all read  3w  │
+    │  ◆✓    lounge                                  1 unread  3w  │
+    │general • subscribed • 3 unread • 3w ago                      │
     │                                                              │
     │                                                              │
     │                                                              │
@@ -127,9 +127,9 @@ defmodule Foglet.TUI.BufferSnapshotTest do
     │ Inbox • 1 unread                                             │
     │                                                              │
     │ ┌─ Notifications ──────────────────────────────────────────┐ │
-    │ │> ● [mention] from @alice                 2d ago          │ │
+    │ │> ● [mention] from @alice                 6d ago          │ │
     │ │    Check the new welcome thread.                         │ │
-    │ │  · [dm] from @mod                        2d ago          │ │
+    │ │  · [dm] from @mod                        6d ago          │ │
     │ │      See the moderator notes.                            │ │
     │ │                                                          │ │
     │ │                                                          │ │
