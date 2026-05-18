@@ -599,19 +599,21 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
       :ok = PresenceTracker.untrack(b.id, "u2")
     end
 
-    test "right/left arrows cycle between threads and chat" do
-      b = board(chat_enabled: true)
-      ctx = context(b)
-      state = BoardScreen.init(ctx)
-      {state, _} = BoardScreen.update(:on_route_enter, state, ctx)
+    test "right/left arrow aliases cycle between threads and chat" do
+      for {right_key, left_key} <- [{:right, :left}, {:arrow_right, :arrow_left}] do
+        b = board(chat_enabled: true)
+        ctx = context(b)
+        state = BoardScreen.init(ctx)
+        {state, _} = BoardScreen.update(:on_route_enter, state, ctx)
 
-      {state, []} = BoardScreen.update({:key, %{key: :right}}, state, ctx)
-      assert state.current_tab == :chat
+        {state, []} = BoardScreen.update({:key, %{key: right_key}}, state, ctx)
+        assert state.current_tab == :chat
 
-      {state, []} = BoardScreen.update({:key, %{key: :left}}, state, ctx)
-      assert state.current_tab == :threads
+        {state, []} = BoardScreen.update({:key, %{key: left_key}}, state, ctx)
+        assert state.current_tab == :threads
 
-      :ok = PresenceTracker.untrack(b.id, "u1")
+        :ok = PresenceTracker.untrack(b.id, "u1")
+      end
     end
 
     test "Q untracks presence and delegates back-nav to ThreadList" do

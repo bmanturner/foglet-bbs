@@ -122,11 +122,13 @@ defmodule Foglet.TUI.Screens.BoardScreen do
     end
   end
 
-  def update({:key, %{key: :left}}, %State{} = state, %Context{} = context),
-    do: switch_tab(state, context, adjacent_tab(state, -1))
+  def update({:key, %{key: key}}, %State{} = state, %Context{} = context)
+      when key in [:left, :arrow_left],
+      do: switch_tab(state, context, adjacent_tab(state, -1))
 
-  def update({:key, %{key: :right}}, %State{} = state, %Context{} = context),
-    do: switch_tab(state, context, adjacent_tab(state, 1))
+  def update({:key, %{key: key}}, %State{} = state, %Context{} = context)
+      when key in [:right, :arrow_right],
+      do: switch_tab(state, context, adjacent_tab(state, 1))
 
   # Q from the threads tab: untrack presence before delegating ThreadList's
   # back-nav. ThreadList still owns the navigate-to-board_list effect, so the
