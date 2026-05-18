@@ -107,6 +107,15 @@ defmodule Foglet.TUI.Widgets.Input.TabsTest do
       assert action == {:tab_changed, 1}
     end
 
+    test "FOG-1453 — Raxol runtime arrow aliases advance tabs" do
+      state = tabs_state()
+      {state, action} = Tabs.handle_event(%{key: :arrow_right}, state)
+      assert action == {:tab_changed, 1}
+
+      {_state, action} = Tabs.handle_event(%{key: :arrow_left}, state)
+      assert action == {:tab_changed, 0}
+    end
+
     test "FOG-1186 — SSH parser-shaped Left/Right arrows change tabs" do
       right_event =
         "\e[C"

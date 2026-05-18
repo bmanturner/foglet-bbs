@@ -464,7 +464,16 @@ defmodule Foglet.TUI.Screens.Account do
   defp text_entry_event?(%{key: :char, char: <<c>>}, :ssh_key_add) when c in ?0..?9, do: true
 
   defp text_entry_event?(%{key: key}, :ssh_key_add)
-       when key in [:left, :right, :home, :end, :delete, :backspace],
+       when key in [
+              :left,
+              :right,
+              :arrow_left,
+              :arrow_right,
+              :home,
+              :end,
+              :delete,
+              :backspace
+            ],
        do: true
 
   defp text_entry_event?(_event, _entry), do: false
@@ -477,8 +486,14 @@ defmodule Foglet.TUI.Screens.Account do
   end
 
   defp action_key(%{key: :char, char: char}) when is_binary(char), do: char
-  defp action_key(%{key: key}), do: key
-  defp action_key(event), do: event
+  defp action_key(%{key: key}), do: normalize_key(key)
+  defp action_key(event), do: normalize_key(event)
+
+  defp normalize_key(:arrow_left), do: :left
+  defp normalize_key(:arrow_right), do: :right
+  defp normalize_key(:arrow_up), do: :up
+  defp normalize_key(:arrow_down), do: :down
+  defp normalize_key(key), do: key
 
   defp domain_module(%Context{} = context, key, default) do
     with nil <- Map.get(context.domain || %{}, key),

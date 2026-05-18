@@ -751,12 +751,14 @@ defmodule Foglet.TUI.Screens.AccountTest do
         build_state(user, %{})
         |> put_in([:screen_state, :account], AccountState.new(current_user: user))
 
-      assert state.screen_state.account.active_tab == 0
-      {:update, state, []} = handle_account_key(%{key: :right}, state)
-      assert state.screen_state.account.active_tab == 1
-      {:update, state, []} = handle_account_key(%{key: :left}, state)
-      assert state.screen_state.account.active_tab == 0
-      assert state.screen_state.account.profile_draft.location == "Bend"
+      for {right_key, left_key} <- [{:right, :left}, {:arrow_right, :arrow_left}] do
+        assert state.screen_state.account.active_tab == 0
+        {:update, state_after_right, []} = handle_account_key(%{key: right_key}, state)
+        assert state_after_right.screen_state.account.active_tab == 1
+        {:update, state_after_left, []} = handle_account_key(%{key: left_key}, state_after_right)
+        assert state_after_left.screen_state.account.active_tab == 0
+        assert state_after_left.screen_state.account.profile_draft.location == "Bend"
+      end
     end
 
     test "FOG-717: cursor keys still advance tabs when no text field is focused" do
@@ -1316,6 +1318,25 @@ defmodule Foglet.TUI.Screens.AccountTest do
         end)
 
       assert state.screen_state.account.ssh_keys.form.public_key == "ssh-ed25519"
+    end
+
+    test "FOG-1453: runtime arrow aliases are protected in SSH KEYS add mode" do
+      user = AccountsFixtures.user_fixture()
+      state = build_state(user, %{}) |> leave_profile_form()
+      {:update, state, []} = handle_account_key(%{key: :right}, state)
+      {:update, state, []} = handle_account_key(%{key: :char, char: "a"}, state)
+      {:update, state, []} = handle_account_key(%{key: :char, char: "x"}, state)
+      assert state.screen_state.account.active_tab == 2
+      assert state.screen_state.account.ssh_keys.mode == :add
+      assert state.screen_state.account.ssh_keys.form.label == "x"
+
+      assert :no_match = handle_account_key(%{key: :arrow_left}, state)
+      assert state.screen_state.account.active_tab == 2
+      assert state.screen_state.account.ssh_keys.form.label == "x"
+
+      assert :no_match = handle_account_key(%{key: :arrow_right}, state)
+      assert state.screen_state.account.active_tab == 2
+      assert state.screen_state.account.ssh_keys.form.label == "x"
     end
 
     test "FOG-142: digit chars are still tab shortcuts in SSH KEYS list mode" do
