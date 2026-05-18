@@ -4,12 +4,18 @@
   "display_name": "Usurper Reborn",
   "description": "Shared-world fantasy BBS game for Foglet callers.",
   "runtime": "classic_dropfile",
-  "command": "{priv:doors/demo/classic_dropfile_demo.py}",
-  "args": [],
-  "working_dir": "{priv:doors/demo}",
+  "command": "/opt/foglet/doors/usurper/UsurperReborn",
+  "args": [
+    "--door32",
+    "{dropfile:door32_sys}",
+    "--db",
+    "/data/usurper/usurper_online.db",
+    "--stdio"
+  ],
+  "working_dir": "/opt/foglet/doors/usurper",
   "dropfiles": [
     {
-      "format": "door_sys",
+      "format": "door32_sys",
       "identity": "handle",
       "transport": "filesystem",
       "encoding": "cp437",
@@ -28,6 +34,10 @@
     "TERM": "xterm-256color"
   },
   "sandbox": {
-    "mode": "none"
+    "mode": "restricted_user_process_group",
+    "user": "foglet-door",
+    "group": "foglet-door",
+    "process_tree": "process_group",
+    "fail_closed?": true
   }
 }
