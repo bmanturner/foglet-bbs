@@ -31,9 +31,11 @@ Current Foglet builds include:
 - In-TUI SSH key management, including adding and removing public keys from an account.
 - Boards, threads, posts, replies, edits, soft deletion, read pointers, board subscriptions, and per-board message numbering.
 - Board-scoped chat rooms where the sysop enables them, with ephemeral or permanent storage backends.
+- Board news/feed surfaces backed by sysop-managed RSS or Atom sources.
+- BBS Mail for direct user-to-user messages, including hide/report actions.
 - Door games through native Elixir, external PTY, and classic dropfile manifests.
 - Oneliners for short public notes.
-- Moderation and sysop workflows for users, boards, configuration, subscriptions, invites, verification, reset tokens, and oneliners where implemented.
+- Moderation and sysop workflows for users, boards, configuration, subscriptions, invites, verification, reset tokens, identity policy, SSH IP access rules, and oneliners where implemented.
 - One active session per user: a new login promotes the new connection and closes the older session.
 - Phoenix endpoint, health check, docs, LiveDashboard in development, PubSub, telemetry, mail plumbing, and other operational infrastructure.
 
@@ -112,7 +114,7 @@ Understand or contribute:
 
 Foglet's detailed operator guidance lives in the docs linked above. Keep secrets in environment/runtime configuration, not DB-backed runtime config.
 
-Useful task families live under `lib/mix/tasks/` and are documented in the Mix tasks page. Examples include user creation and status changes, invite creation and inspection, verification-code inspection, reset-token inspection and expiry, board subscription management, board-chat inspection, TUI rendering, QA mode, and `foglet.doctor`.
+Useful task families live under `lib/mix/tasks/` and are documented in the Mix tasks page. Examples include user creation and status changes, invite creation and inspection, verification-code inspection, reset-token inspection and expiry, board subscription management, board-chat inspection, identity policy rules, SSH IP access rules, TUI rendering, QA mode, and `foglet.doctor`.
 
 ## Repository layout
 
