@@ -234,14 +234,21 @@ defmodule Raxol.UI.ElementRenderer do
 
   defp apply_border_colors(style) do
     # Look for :border_fg/:border_bg at the top level first, then fall
-    # back to attrs.style — the UI layout engine nests the original
-    # view-DSL style map under :attrs.style and the renderer doesn't
-    # currently lift it back out. See engine.ex:284 / style_processor.ex:78.
-    nested = get_in(style, [:attrs, :style]) || %{}
+    # back to panel attrs and view-DSL style attrs. Panel layout stores
+    # original attrs under :attrs; the View DSL nests style options under
+    # :attrs.style. See engine.ex:284 / style_processor.ex:78.
+    attrs = Map.get(style, :attrs, %{})
+    nested = Map.get(attrs, :style, %{})
 
     style
-    |> maybe_override(:fg, Map.get(style, :border_fg) || Map.get(nested, :border_fg))
-    |> maybe_override(:bg, Map.get(style, :border_bg) || Map.get(nested, :border_bg))
+    |> maybe_override(
+      :fg,
+      Map.get(style, :border_fg) || Map.get(attrs, :border_fg) || Map.get(nested, :border_fg)
+    )
+    |> maybe_override(
+      :bg,
+      Map.get(style, :border_bg) || Map.get(attrs, :border_bg) || Map.get(nested, :border_bg)
+    )
   end
 
   defp maybe_override(style, _key, nil), do: style
