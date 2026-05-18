@@ -34,10 +34,6 @@
     "TERM": "xterm-256color"
   },
   "sandbox": {
-    "mode": "restricted_user_process_group",
-    "user": "foglet-door",
-    "group": "foglet-door",
-    "process_tree": "process_group",
-    "fail_closed?": true
+    "mode": "none"
   }
 }
