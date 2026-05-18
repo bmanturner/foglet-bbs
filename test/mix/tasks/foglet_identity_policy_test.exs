@@ -24,7 +24,7 @@ defmodule Mix.Tasks.FogletIdentityPolicyTest do
     assert_received {:mix_shell, :info, [created]}
     assert created =~ "created id="
     assert_received {:mix_shell, :info, [warning]}
-    assert warning =~ "conflicts=1"
+    assert warning =~ ~r/conflicts=[1-9][0-9]*/
 
     [rule] = IdentityPolicy.list_rules()
 

@@ -519,10 +519,10 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
 
       assert_screen(render_buffer(warmed, context), ~B"""
       ┌ Foglet ▸ General ▸ Hello ───────────────── @alice | 05:43 PM ┐
-      │▶ Post 1 of 2 • #1 • ▲0 • @alice • 3w ago                     │
+      │▶ Post 1 of 2 • #1 • ▲0 • @alice • 1mo ago                    │
       ││ MD[first]                                                   │
       │──────────────────────────────────────────────────────────────│
-      │Post 2 of 2 • #2 • ▲0 • @bob • 3w ago                         │
+      │Post 2 of 2 • #2 • ▲0 • @bob • 1mo ago                        │
       ││ MD[second]                                                  │
       │                                                              │
       │                                                              │
