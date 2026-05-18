@@ -14,6 +14,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
   alias Foglet.TUI.Screens.Account
   alias Foglet.TUI.Screens.Account.SSHKeysState
   alias Foglet.TUI.Screens.Account.State, as: AccountState
+  alias Foglet.TUI.Screens.Shared.InvitesState
   alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias FogletBbs.AccountsFixtures
@@ -784,8 +785,79 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert new_state.current_screen == :main_menu
     end
 
-    test "plain 'q' is ignored by Account list mode", %{state: state} do
-      assert :no_match = handle_account_key(%{key: :char, char: "q"}, state)
+    test "Q returns to :main_menu from Account PROFILE and PREFS", %{state: state} do
+      for tab <- ["PROFILE", "PREFS"] do
+        state =
+          state
+          |> ensure_account_seeded()
+          |> update_in(
+            [:screen_state, :account],
+            &Foglet.TUI.LayoutSmokeHelpers.set_active_tab(&1, tab)
+          )
+
+        {:update, new_state, _cmds} = handle_account_key(%{key: :char, char: "q"}, state)
+
+        assert new_state.current_screen == :main_menu
+      end
+    end
+
+    test "Q returns to :main_menu from Account SSH KEYS and INVITES list modes", %{state: state} do
+      state =
+        state
+        |> Map.put(:session_context, %{
+          registration_mode: "invite_only",
+          invite_code_generators: "any_user"
+        })
+
+      context = account_context(state)
+      state = put_in(state, [:screen_state, :account], Account.init(context))
+
+      ssh_state =
+        update_in(state.screen_state.account, fn account ->
+          account
+          |> Foglet.TUI.LayoutSmokeHelpers.set_active_tab("SSH KEYS")
+          |> Map.put(:ssh_keys, SSHKeysState.loaded(SSHKeysState.new(), []))
+        end)
+
+      {:update, new_state, _cmds} = handle_account_key(%{key: :char, char: "Q"}, ssh_state)
+      assert new_state.current_screen == :main_menu
+
+      invites_state =
+        update_in(state.screen_state.account, fn account ->
+          account
+          |> Foglet.TUI.LayoutSmokeHelpers.set_active_tab("INVITES")
+          |> Map.put(:invites, InvitesState.loaded(InvitesState.new(), []))
+        end)
+
+      {:update, new_state, _cmds} = handle_account_key(%{key: :char, char: "q"}, invites_state)
+      assert new_state.current_screen == :main_menu
+    end
+
+    test "Esc still does not leave Account from PROFILE page-level handling", %{state: state} do
+      state = ensure_account_seeded(state)
+
+      assert :no_match = handle_account_key(%{key: :escape}, state)
+    end
+
+    test "Esc still cancels SSH key revoke confirmation instead of leaving Account", %{
+      state: state
+    } do
+      state =
+        state
+        |> ensure_account_seeded()
+        |> update_in([:screen_state, :account], fn account ->
+          account
+          |> Foglet.TUI.LayoutSmokeHelpers.set_active_tab("SSH KEYS")
+          |> Map.update!(
+            :ssh_keys,
+            &%{&1 | mode: :confirm_revoke, confirm_target: %{label: "key"}}
+          )
+        end)
+
+      {:update, new_state, []} = handle_account_key(%{key: :escape}, state)
+
+      assert new_state.current_screen == :account
+      assert new_state.screen_state.account.ssh_keys.mode == :list
     end
 
     test "non-text unknown key returns :no_match", %{state: state} do
