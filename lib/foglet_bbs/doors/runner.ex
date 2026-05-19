@@ -47,6 +47,7 @@ defmodule Foglet.Doors.Runner do
     :last_resize,
     :pending_helper_exit_reason,
     :pending_helper_exit_status,
+    output_encoding_buffer: "",
     status: :starting,
     exit_reason: nil,
     exit_status: nil,
@@ -137,13 +138,13 @@ defmodule Foglet.Doors.Runner do
     if function_exported?(module, :handle_input, 2) do
       case module.handle_input(data, state.native_state) do
         {:ok, native_state, output} ->
-          emit(state, output)
+          state = emit(state, output)
 
           {:noreply,
            %{state | native_state: native_state} |> mark_output() |> refresh_idle_timeout()}
 
         {:stop, reason, native_state, output} ->
-          emit(state, output)
+          state = emit(state, output)
 
           {:stop, :normal,
            complete(%{state | native_state: native_state} |> mark_output(), reason, nil)}
@@ -189,7 +190,7 @@ defmodule Foglet.Doors.Runner do
     if function_exported?(module, :handle_resize, 2) do
       case module.handle_resize(size, state.native_state) do
         {:ok, native_state, output} ->
-          emit(state, output)
+          state = emit(state, output)
           {:noreply, %{state | native_state: native_state}}
       end
     else
@@ -235,7 +236,7 @@ defmodule Foglet.Doors.Runner do
 
     case state.manifest.module.init(context) do
       {:ok, native_state, output} ->
-        emit(state, output)
+        state = emit(state, output)
         notify_owner(state, {:door_started, self(), state.manifest.id})
         {:noreply, %{state | native_state: native_state, status: :running}}
 
@@ -312,7 +313,7 @@ defmodule Foglet.Doors.Runner do
       ) do
     case PTYAdapter.decode_frame(data) do
       {:output, output} ->
-        emit(state, output)
+        state = emit(state, output)
         {:noreply, state |> mark_output() |> refresh_idle_timeout()}
 
       {:exit, status} ->
@@ -338,7 +339,7 @@ defmodule Foglet.Doors.Runner do
   end
 
   def handle_info({_port, {:data, data}}, state) do
-    emit(state, data)
+    state = emit(state, data)
     {:noreply, state |> mark_output() |> refresh_idle_timeout()}
   end
 
@@ -416,23 +417,33 @@ defmodule Foglet.Doors.Runner do
   end
 
   defp emit(%{output: output} = state, data) when is_function(output, 1) do
-    _ = output.(encode_output(state, data))
-    :ok
+    {encoded, state} = encode_output(state, data)
+    _ = output.(encoded)
+    state
   rescue
     e ->
       log_privacy_safe(:warning, state, :door_output_callback_failed, %{
         reason_class: reason_class(e)
       })
 
-      :ok
+      state
   end
 
-  defp encode_output(%{manifest: %Manifest{output_encoding: encoding}}, data)
+  defp encode_output(
+         %{manifest: %Manifest{output_encoding: :utf8}, output_encoding_buffer: pending} = state,
+         data
+       )
        when is_binary(data) do
-    Foglet.Doors.OutputEncoding.to_terminal(data, encoding || :utf8)
+    {encoded, pending} = Foglet.Doors.OutputEncoding.to_terminal(data, :utf8, pending)
+    {encoded, %{state | output_encoding_buffer: pending}}
   end
 
-  defp encode_output(_state, data), do: data
+  defp encode_output(%{manifest: %Manifest{output_encoding: encoding}} = state, data)
+       when is_binary(data) do
+    {Foglet.Doors.OutputEncoding.to_terminal(data, encoding || :utf8), state}
+  end
+
+  defp encode_output(state, data), do: {data, state}
 
   defp mark_input(state), do: %{state | last_input_at: DateTime.utc_now()}
   defp mark_output(state), do: %{state | last_output_at: DateTime.utc_now()}

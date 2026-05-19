@@ -9,8 +9,7 @@
     "--door32",
     "{dropfile:door32_sys}",
     "--db",
-    "/data/usurper/usurper_online.db",
-    "--stdio"
+    "/tmp/foglet-usurper-qa/usurper_online.db"
   ],
   "working_dir": "/opt/foglet/doors/usurper",
   "dropfiles": [
@@ -27,17 +26,13 @@
   "idle_timeout_ms": 3600000,
   "visibility": "members",
   "auth_scope": "site",
-  "output_encoding": "cp437",
+  "output_encoding": "utf8",
   "env": {
     "LANG": "en_US.UTF-8",
     "LC_ALL": "en_US.UTF-8",
     "TERM": "xterm-256color"
   },
   "sandbox": {
-    "mode": "restricted_user_process_group",
-    "user": "foglet-door",
-    "group": "foglet-door",
-    "process_tree": "process_group",
-    "fail_closed?": true
+    "mode": "none"
   }
 }

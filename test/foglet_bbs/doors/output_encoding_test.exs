@@ -22,5 +22,23 @@ defmodule Foglet.Doors.OutputEncodingTest do
       refute text =~ "�"
       assert text == "█▒▓■"
     end
+
+    test "repairs isolated invalid CP437 bytes in otherwise UTF-8 output" do
+      text =
+        OutputEncoding.to_terminal(
+          "████▀" <> <<0xDC, 0xDC>> <> "▀▀▀█▄\r\nPress any key...",
+          :utf8
+        )
+
+      refute text =~ "�"
+      assert text == "████▀▄▄▀▀▀█▄\r\nPress any key..."
+    end
+
+    test "buffers UTF-8 characters split across output chunks" do
+      <<first::binary-size(1), rest::binary>> = "■"
+
+      assert {"", first} == OutputEncoding.to_terminal(first, :utf8, "")
+      assert {"■", ""} == OutputEncoding.to_terminal(rest, :utf8, first)
+    end
   end
 end

@@ -153,6 +153,20 @@ class TerminalOutputSanitizerTest(unittest.TestCase):
         self.assertEqual(sanitizer.filter(b"before\x1b"), b"before")
         self.assertEqual(sanitizer.filter(b"cafter"), b"after")
 
+    def test_strips_door_terminal_mode_toggles_from_usurper_splash_prefix(self):
+        sanitizer = self.helper.TerminalOutputSanitizer()
+
+        self.assertEqual(
+            sanitizer.filter(b"\x1b[?1h\x1b=\x1b[2J\x1b[Hdraw"),
+            b"\x1b[2J\x1b[Hdraw",
+        )
+
+    def test_strips_split_application_keypad_toggle_before_following_output(self):
+        sanitizer = self.helper.TerminalOutputSanitizer()
+
+        self.assertEqual(sanitizer.filter(b"before\x1b"), b"before")
+        self.assertEqual(sanitizer.filter(b"=after"), b"after")
+
     def test_defers_standalone_full_screen_clear_until_menu_redraw_arrives(self):
         sanitizer = self.helper.TerminalOutputSanitizer()
 
