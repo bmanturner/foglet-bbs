@@ -54,7 +54,7 @@ defmodule Foglet.TUI.Screens.Account.Render do
 
     system_group = %{
       label: "System",
-      commands: [%{key: "Ctrl+Q", label: "Back", priority: 0}]
+      commands: [%{key: "Q", label: "Back", priority: 0}]
     }
 
     middle = middle_groups(active_label, ss)

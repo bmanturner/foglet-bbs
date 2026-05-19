@@ -53,8 +53,7 @@ defmodule Foglet.TUI.Screens.Account do
   @spec update(term(), State.t() | nil, Context.t()) :: {State.t(), [Effect.t()]}
   def update({:key, %{key: :char, char: c, ctrl: true}}, local_state, %Context{})
       when c in ["q", "Q"] do
-    {normalize_state(local_state) |> Map.put(:candidate_theme_id, nil),
-     [Effect.navigate(:main_menu, %{})]}
+    exit_to_main_menu(local_state)
   end
 
   def update({:key, event}, local_state, %Context{} = context) do
@@ -63,10 +62,15 @@ defmodule Foglet.TUI.Screens.Account do
       |> normalize_state(context)
       |> sync_prefs_focus()
 
-    if tab_navigation_focus?(ss) and event.key == :enter do
-      {%{ss | tab_navigation?: false}, []}
-    else
-      do_update_key(event, ss, context)
+    cond do
+      page_back_key?(event) and page_back_allowed?(ss) ->
+        exit_to_main_menu(ss)
+
+      tab_navigation_focus?(ss) and event.key == :enter ->
+        {%{ss | tab_navigation?: false}, []}
+
+      true ->
+        do_update_key(event, ss, context)
     end
   end
 
@@ -218,6 +222,27 @@ defmodule Foglet.TUI.Screens.Account do
   end
 
   defp active_label(%State{} = ss), do: Enum.at(tab_labels(ss), ss.active_tab)
+
+  defp exit_to_main_menu(local_state) do
+    {normalize_state(local_state) |> Map.put(:candidate_theme_id, nil),
+     [Effect.navigate(:main_menu, %{})]}
+  end
+
+  defp page_back_key?(%{key: :char, char: c, ctrl: ctrl}) when c in ["q", "Q"],
+    do: ctrl != true
+
+  defp page_back_key?(%{key: :char, char: c}) when c in ["q", "Q"], do: true
+
+  defp page_back_key?(_event), do: false
+
+  defp page_back_allowed?(%State{} = ss) do
+    case active_label(ss) do
+      "SSH KEYS" -> ss.ssh_keys.mode == :list
+      "INVITES" -> ss.invites.mode == :list
+      label when label in ["PROFILE", "PREFS"] -> true
+      _ -> true
+    end
+  end
 
   defp do_update_key(event, %State{} = ss, %Context{} = context) do
     if shield_tab_shortcut?(event, ss) do
