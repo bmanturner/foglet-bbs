@@ -82,7 +82,8 @@ defmodule Foglet.TUI.Widgets.Input.Tabs do
 
   @spec handle_event(map(), t()) :: {t(), action()}
   def handle_event(event, %__MODULE__{raxol_state: rs} = st) do
-    raxol_event = %Raxol.Core.Events.Event{type: :key, data: event}
+    normalized_event = normalize_event(event)
+    raxol_event = %Raxol.Core.Events.Event{type: :key, data: normalized_event}
     {new_rs, _cmds} = RaxolTabs.handle_event(raxol_event, rs, %{})
     action = derive_action(rs, new_rs)
     {%{st | raxol_state: new_rs, last_action: action}, action}
@@ -106,7 +107,11 @@ defmodule Foglet.TUI.Widgets.Input.Tabs do
     end
   end
 
-  # --- private ---
+  defp normalize_event(%{key: :arrow_left} = event), do: %{event | key: :left}
+  defp normalize_event(%{key: :arrow_right} = event), do: %{event | key: :right}
+  defp normalize_event(%{key: :arrow_up} = event), do: %{event | key: :up}
+  defp normalize_event(%{key: :arrow_down} = event), do: %{event | key: :down}
+  defp normalize_event(event), do: event
 
   defp normalize_tab(label) when is_binary(label), do: %{label: label}
 
