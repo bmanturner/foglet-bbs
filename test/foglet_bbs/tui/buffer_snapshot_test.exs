@@ -127,9 +127,9 @@ defmodule Foglet.TUI.BufferSnapshotTest do
     │ Inbox • 1 unread                                             │
     │                                                              │
     │ ┌─ Notifications ──────────────────────────────────────────┐ │
-    │ │> ● [mention] from @alice                 6d ago          │ │
+    │ │> ● [mention] from @alice                 1w ago          │ │
     │ │    Check the new welcome thread.                         │ │
-    │ │  · [dm] from @mod                        6d ago          │ │
+    │ │  · [dm] from @mod                        1w ago          │ │
     │ │      See the moderator notes.                            │ │
     │ │                                                          │ │
     │ │                                                          │ │
