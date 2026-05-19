@@ -142,10 +142,36 @@ defmodule Foglet.Doors.OutputEncoding do
 
   @doc "Converts door output bytes to the SSH terminal's UTF-8 stream."
   @spec to_terminal(binary(), encoding()) :: binary()
-  def to_terminal(data, :utf8) when is_binary(data), do: data
+  def to_terminal(data, :utf8) when is_binary(data) do
+    {output, pending} = to_terminal(data, :utf8, "")
+    output <> cp437_pending(pending)
+  end
 
   def to_terminal(data, :cp437) when is_binary(data) do
     transcode_cp437(data, [])
+  end
+
+  @doc "Converts a UTF-8 door output chunk with a pending partial sequence buffer."
+  @spec to_terminal(binary(), :utf8, binary()) :: {binary(), binary()}
+  def to_terminal(data, :utf8, pending) when is_binary(data) and is_binary(pending) do
+    repair_utf8(pending <> data, [])
+  end
+
+  defp repair_utf8(<<>>, acc), do: {acc |> Enum.reverse() |> IO.iodata_to_binary(), ""}
+
+  defp repair_utf8(<<codepoint::utf8, rest::binary>>, acc) do
+    repair_utf8(rest, [<<codepoint::utf8>> | acc])
+  end
+
+  # Usurper Reborn emits mostly UTF-8, but some splash-art cells can arrive as
+  # raw CP437 high bytes from legacy art assets. Buffer incomplete UTF-8 that was
+  # split across PTY frames; convert only definitely invalid bytes to CP437.
+  defp repair_utf8(<<byte, rest::binary>> = data, acc) do
+    if incomplete_utf8_prefix?(byte, rest) do
+      {acc |> Enum.reverse() |> IO.iodata_to_binary(), data}
+    else
+      repair_utf8(rest, [cp437_byte(byte) | acc])
+    end
   end
 
   defp transcode_cp437(<<>>, acc), do: acc |> Enum.reverse() |> IO.iodata_to_binary()
@@ -158,6 +184,17 @@ defmodule Foglet.Doors.OutputEncoding do
   end
 
   defp transcode_cp437(<<byte, rest::binary>>, acc) do
-    transcode_cp437(rest, [Map.fetch!(@cp437, byte) | acc])
+    transcode_cp437(rest, [cp437_byte(byte) | acc])
   end
+
+  defp incomplete_utf8_prefix?(byte, rest) when byte in 0xC2..0xDF, do: byte_size(rest) < 1
+  defp incomplete_utf8_prefix?(byte, rest) when byte in 0xE0..0xEF, do: byte_size(rest) < 2
+  defp incomplete_utf8_prefix?(byte, rest) when byte in 0xF0..0xF4, do: byte_size(rest) < 3
+  defp incomplete_utf8_prefix?(_byte, _rest), do: false
+
+  defp cp437_pending(<<>>), do: ""
+  defp cp437_pending(pending), do: transcode_cp437(pending, [])
+
+  defp cp437_byte(byte) when byte < 0x80, do: <<byte>>
+  defp cp437_byte(byte), do: Map.fetch!(@cp437, byte)
 end
