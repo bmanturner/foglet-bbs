@@ -9,8 +9,7 @@
     "--door32",
     "{dropfile:door32_sys}",
     "--db",
-    "/data/usurper/usurper_online.db",
-    "--stdio"
+    "/tmp/foglet-usurper-qa/usurper_online.db"
   ],
   "working_dir": "/opt/foglet/doors/usurper",
   "dropfiles": [
